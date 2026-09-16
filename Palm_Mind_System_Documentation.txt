@@ -1,0 +1,84 @@
+================================================================================
+PALM MIND TECHNOLOGY — TECHNICAL SYSTEM & ARCHITECTURE DOCUMENTATION
+Version: 1.0.0
+Date: September 16, 2026
+================================================================================
+
+1. SYSTEM OVERVIEW
+--------------------------------------------------------------------------------
+The Palm Mind Technology system is a modular, high-performance Retrieval-
+Augmented Generation (RAG) backend API. Built with FastAPI, SQLite, Qdrant, and
+Redis, it provides document ingestion (.pdf and .txt), vector search indexing,
+sliding-window chat session memory, and automated interview booking via Groq LLM.
+
+
+2. PROJECT STRUCTURE & FILE RESPONSIBILITIES
+--------------------------------------------------------------------------------
+Palm_Mind_Technology/
+├── app/
+│   ├── api/
+│   │   ├── __init__.py
+│   │   ├── v1_ingestion.py    [Route] /api/v1/ingest - Handles file uploads,
+│   │   │                      disk saving, and vector ingestion pipeline.
+│   │   └── v1_chat.py         [Route] /api/v1/chat - Handles RAG queries,
+│   │                          session tracking, and interview booking responses.
+│   ├── models/
+│   │   ├── metadata.py        [Database Model] DocumentMetadata table.
+│   │   └── booking.py         [Database Model] InterviewBooking table.
+│   ├── schemas/
+│   │   └── chat.py            [Pydantic] ChatRequest & ChatResponse schemas.
+│   ├── services/
+│   │   ├── text_extractor.py  [Service] Extracts text from PDF and TXT files.
+│   │   ├── chunker.py         [Service] Recursive/Character text splitter.
+│   │   ├── embedder.py        [Service] SentenceTransformer vector generator.
+│   │   ├── vector_db.py       [Service] Disk-backed local Qdrant Vector DB.
+│   │   ├── redis_memory.py    [Service] Chat session history via Redis.
+│   │   └── llm_rag.py         [Service] Groq LLM caller, RAG builder, and
+│   │                          interview booking extractor.
+│   ├── config.py              [Config] Loads environment settings (.env).
+│   ├── database.py            [DB] SQLite engine and SessionLocal setup.
+│   └── main.py                [Entrypoint] FastAPI app, CORS, and routers.
+├── storage/
+│   ├── uploads/               [Disk Persistence] Stores uploaded PDF and TXT files.
+│   └── qdrant_storage/        [Disk Persistence] Stores Qdrant vector database.
+├── .env                       [Secrets] Environment variables & API keys.
+└── metadata.db                [SQLite DB] Relational metadata & booking records.
+
+
+3. STORAGE & PERSISTENCE MODEL
+--------------------------------------------------------------------------------
+- storage/uploads/ : Stores raw files with UUID prefixes (<uuid>_<filename>).
+- storage/qdrant_storage/ : Stores 384-dimensional vector embeddings on disk.
+- metadata.db : Relational database storing document metadata & interview records.
+- Redis (chat_history:<session_id>) : In-memory sliding window chat memory
+  (retains last 20 messages per session).
+
+
+4. HOW TO RUN & USE THE SYSTEM
+--------------------------------------------------------------------------------
+Step 1: Start Redis Server
+   Command: redis-server
+
+Step 2: Start the FastAPI Server
+   Command: uvicorn app.main:app --reload
+
+Step 3: Access Interactive API Documentation
+   URL: http://127.0.0.1:8000/docs
+
+Step 4: Inspect Database Records (SQLite)
+   Command: datasette metadata.db
+   URL: http://127.0.0.1:8001
+
+
+5. API ENDPOINTS SUMMARY
+--------------------------------------------------------------------------------
+A. POST /api/v1/ingest
+   - Accepts multipart/form-data (.pdf or .txt).
+   - Saves file to storage/uploads/, extracts text, generates embeddings,
+     and stores vectors in Qdrant + metadata in SQLite.
+
+B. POST /api/v1/chat
+   - Accepts JSON payload: {"session_id": "...", "message": "..."}
+   - Retrieves top-k similar chunks from Qdrant, maintains context in Redis,
+     and auto-detects interview booking requests to save into SQLite.
+================================================================================
