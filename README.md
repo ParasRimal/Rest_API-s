@@ -1,225 +1,224 @@
-# Modular Document Ingestion & Conversational RAG API
+# Enterprise Modular Document Ingestion & Conversational RAG API
 
-A high-performance, production-ready backend API service built with **FastAPI**, **Qdrant**, **Redis**, **SQLAlchemy**, and **Groq LLM**. This system provides robust end-to-end document processing, text chunking, dense vector embeddings, persistent vector search indexing, sliding-window session memory, and automated interview booking extraction.
+[![FastAPI](https://img.shields.io/badge/FastAPI-005571?style=for-the-badge&logo=fastapi)](https://fastapi.tiangolo.com/)
+[![Qdrant](https://img.shields.io/badge/Qdrant-Vector%20DB-red?style=for-the-badge)](https://qdrant.tech/)
+[![Redis](https://img.shields.io/badge/Redis-DC382D?style=for-the-badge&logo=redis&logoColor=white)](https://redis.io/)
+[![Groq](https://img.shields.io/badge/Groq-LLM%20Inference-f50?style=for-the-badge)](https://groq.com/)
+[![SQLite](https://img.shields.io/badge/SQLite-003B57?style=for-the-badge&logo=sqlite&logoColor=white)](https://www.sqlite.org/)
 
----
-
-## 🌟 Key Features
-
-- **Document Ingestion API (`POST /api/v1/ingest`)**:
-  - Supports `.pdf` and `.txt` file uploads.
-  - Disk-backed raw file persistence in `storage/uploads/` with UUID conflict prevention.
-  - Selectable text chunking strategies (`recursive` or `character`).
-  - Dense 384-dimensional vector embedding generation using `SentenceTransformer` (`all-MiniLM-L6-v2`).
-  - Local disk vector indexing via **Qdrant**.
-  - Relational document metadata tracking in **SQLite**.
-
-- **Conversational RAG API (`POST /api/v1/chat`)**:
-  - Custom Retrieval-Augmented Generation (RAG) implementation (built without heavy chain abstractions).
-  - Powered by fast **Groq LLM** (`llama-3.3-70b-versatile`).
-  - **Redis** sliding-window session history management (retains multi-turn context per `session_id`).
-  - Integrated zero-shot LLM **Intent Detection** for automated interview booking (`name`, `email`, `date`, `time`).
-  - Relational interview booking persistence in **SQLite**.
+A production-ready, asynchronous backend engine built with **FastAPI** to handle document processing, dense vector indexing, multi-turn conversational RAG (Retrieval-Augmented Generation), and automated intent extraction.
 
 ---
 
-## 🏗 System Architecture & Directory Structure
+## System Architecture & Data Flow
+
+```mermaid
+flowchart TD
+    subgraph Client Layer
+        A[Client / UI / cURL]
+    end
+
+    subgraph API Layer FastAPI
+        B1[POST /api/v1/ingest]
+        B2[POST /api/v1/chat]
+    end
+
+    subgraph Processing Services
+        C1[Text Extractor pypdf / TXT]
+        C2[Chunker Service Recursive / Character]
+        C3[Embedding Model SentenceTransformer]
+        C4[RAG Orchestrator & LLM Service Groq API]
+    end
+
+    subgraph Persistence Layer
+        D1[(Disk Uploads storage/uploads/)]
+        D2[(Qdrant Vector DB storage/qdrant_storage/)]
+        D3[(Redis Session Store chat_history:session_id)]
+        D4[(SQLite Database metadata.db)]
+    end
+
+    %% Ingestion Flow
+    A -->|1. Upload PDF / TXT| B1
+    B1 -->|2. Save Raw File| D1
+    B1 -->|3. Extract Text| C1
+    C1 -->|4. Split Text| C2
+    C2 -->|5. Vectorize Chunks| C3
+    C3 -->|6. Upsert Vectors & Payloads| D2
+    B1 -->|7. Store Document Record| D4
+
+    %% Chat & RAG Flow
+    A -->|1. Chat Query & session_id| B2
+    B2 -->|2. Fetch Multi-Turn History| D3
+    B2 -->|3. Similarity Search Top-K| D2
+    D2 -->|4. Relevant Context| B2
+    B2 -->|5. Augment Prompt & Detect Intent| C4
+    C4 -->|6a. Contextual Answer| B2
+    C4 -->|6b. Extracted Booking Details| D4
+    B2 -->|7. Append Interaction| D3
+    B2 -->|8. JSON Response| A
+```
+
+---
+
+## Key Technical Features
+
+### 1. Document Ingestion Pipeline (`POST /api/v1/ingest`)
+* **Multi-Format Parsing:** Safely processes binary `.pdf` streams via `pypdf` and plain text `.txt` files.
+* **Storage Isolation:** Saves physical uploaded files to disk (`storage/uploads/`) using unique UUID prefixes (`<uuid>_<filename>`) to prevent file overwrite collisions.
+* **Configurable Chunking:** Supports runtime selection between **Recursive Character** and **Standard Character** chunking strategies, with customizable `chunk_size` and `chunk_overlap`.
+* **Dense Vector Indexing:** Utilizes `SentenceTransformer` (`all-MiniLM-L6-v2`) to convert text chunks into 384-dimensional vector embeddings, persisted locally in **Qdrant**.
+* **Relational Tracking:** Logs document upload metadata, chunk counts, and file paths to SQLite via SQLAlchemy.
+
+### 2. Conversational RAG & Memory (`POST /api/v1/chat`)
+* **Custom RAG Execution:** Direct retrieval, context formatting, and LLM prompting without high-level chain frameworks like `RetrievalQAChain`.
+* **Sliding-Window Memory:** Connects to **Redis** to retrieve and save session-bound dialogue history, maintaining multi-turn context across queries.
+* **Low-Latency LLM Inference:** Powered by **Groq API** (`llama-3.3-70b-versatile`) for context augmentation and synthesis.
+
+### 3. Automated Interview Booking Extraction
+* **Zero-Shot Intent Detection:** Dynamically evaluates incoming user chat messages to identify interview scheduling requests.
+* **Structured Parsing:** Extracts structured fields (`name`, `email`, `date`, `time`) directly from free-form user input.
+* **Database Persistence:** Automatically logs confirmed booking records into SQLite (`interview_bookings` table).
+
+---
+
+## Directory Structure & Component Responsibility
 
 ```text
 Palm_Mind_Technology/
 ├── app/
 │   ├── api/
 │   │   ├── __init__.py
-│   │   ├── v1_ingestion.py      # Route: Document upload, chunking, and indexing
-│   │   └── v1_chat.py           # Route: Conversational RAG & interview booking
+│   │   ├── v1_ingestion.py      # Route: Handles file upload, disk storage, and vector indexing
+│   │   └── v1_chat.py           # Route: Manages chat queries, memory, and booking detection
 │   ├── models/
 │   │   ├── __init__.py
-│   │   ├── metadata.py          # SQLAlchemy model for DocumentMetadata
-│   │   └── booking.py           # SQLAlchemy model for InterviewBooking
+│   │   ├── metadata.py          # SQLAlchemy model: DocumentMetadata
+│   │   └── booking.py           # SQLAlchemy model: InterviewBooking
 │   ├── schemas/
 │   │   ├── __init__.py
-│   │   └── chat.py              # Pydantic request/response validation schemas
+│   │   └── chat.py              # Pydantic schemas: Request & response models
 │   ├── services/
 │   │   ├── __init__.py
-│   │   ├── text_extractor.py    # Multi-format text extraction (pypdf / TXT)
-│   │   ├── chunker.py           # Recursive & Character text splitting service
-│   │   ├── embedder.py          # SentenceTransformer vector embedding service
-│   │   ├── vector_db.py         # Persistent local Qdrant vector store service
-│   │   ├── redis_memory.py      # Session-bound Redis chat history manager
-│   │   └── llm_rag.py           # Custom RAG engine & LLM booking intent extractor
-│   ├── config.py                # Pydantic settings & environment configuration
-│   ├── database.py              # SQLAlchemy engine & session factory setup
-│   └── main.py                  # FastAPI application entry point
+│   │   ├── text_extractor.py    # Service: Extracts raw text from PDF/TXT files
+│   │   ├── chunker.py           # Service: Text splitting algorithms
+│   │   ├── embedder.py          # Service: Generates 384-dim dense vector embeddings
+│   │   ├── vector_db.py         # Service: Qdrant client connection & vector search
+│   │   ├── redis_memory.py      # Service: Handles Redis sliding-window session context
+│   │   └── llm_rag.py           # Service: Groq LLM integration, prompt building, & intent parsing
+│   ├── config.py                # Configuration loader via pydantic-settings
+│   ├── database.py              # SQLAlchemy engine and session dependency
+│   └── main.py                  # FastAPI application entry point & middleware configuration
 ├── storage/
-│   ├── uploads/                 # Persistent storage for raw uploaded files
-│   └── qdrant_storage/          # Disk-backed Qdrant vector database collection
-├── .env                         # Environment variables & secret API keys
-├── .gitignore                   # Version control exclusion rules
-├── metadata.db                  # SQLite database for operational metadata
+│   ├── uploads/                 # Persistent local disk directory for raw uploads
+│   └── qdrant_storage/          # Persistent local disk storage for Qdrant collection
+├── .env                         # Environment variables and API keys
+├── .gitignore                   # Git exclusion rules
+├── metadata.db                  # Local SQLite relational database file
 └── requirements.txt             # Python project dependencies
 ```
 
 ---
 
-## 🛠 Tech Stack & Tools
+## Setup & Local Installation
 
-| Component | Tool / Library | Purpose |
-| :--- | :--- | :--- |
-| **Framework** | FastAPI + Uvicorn | Async web framework & high-concurrency server |
-| **Database ORM** | SQLAlchemy + SQLite | Relational metadata and interview booking storage |
-| **Vector Database** | Qdrant Client (Disk-Backed) | Local persistent vector index with Cosine similarity |
-| **LLM Inference** | Groq API (`llama-3.3-70b-versatile`) | Rapid context synthesis and intent extraction |
-| **Embeddings** | `SentenceTransformer` (`all-MiniLM-L6-v2`) | Generates dense 384-dimensional vector embeddings |
-| **Session Memory** | Redis | Multi-turn conversation sliding window memory |
-| **Document Parsing** | `pypdf` (`PdfReader`) | Memory-safe text extraction from PDF pages |
+### Prerequisites
+* Python 3.10+
+* Redis Server running locally on port `6379`
 
----
+### Installation Steps
 
-## ⚙️ Environment Configuration (`.env`)
+1. **Activate Virtual Environment:**
+   ```bash
+   source api/bin/activate
+   ```
 
-Create a `.env` file in the project root folder:
+2. **Install Dependencies:**
+   ```bash
+   pip install -r requirements.txt
+   ```
 
-```env
-# Server & Database Settings
-DATABASE_URL=sqlite:///./metadata.db
-HOST=0.0.0.0
-PORT=8000
+3. **Configure Environment Variables (`.env`):**
+   ```env
+   DATABASE_URL=sqlite:///./metadata.db
+   HOST=0.0.0.0
+   PORT=8000
 
-# Groq LLM API Key
-GROQ_API_KEY=your_groq_api_key_here
+   GROQ_API_KEY=your_groq_api_key_here
+   EMBEDDING_MODEL_NAME=all-MiniLM-L6-v2
 
-# Embedding Model
-EMBEDDING_MODEL_NAME=all-MiniLM-L6-v2
+   REDIS_HOST=localhost
+   REDIS_PORT=6379
 
-# Redis Cache Service
-REDIS_HOST=localhost
-REDIS_PORT=6379
+   QDRANT_URL=http://localhost:6333
+   ```
 
-# Qdrant Vector Service
-QDRANT_URL=http://localhost:6333
-```
+4. **Start Redis Server:**
+   ```bash
+   redis-server
+   ```
 
----
-
-## 🚀 Local Setup & Installation
-
-### 1. Clone Repository & Activate Environment
-
-```bash
-git clone https://github.com/YOUR_USERNAME/Document_Ingestion_API.git
-cd Document_Ingestion_API
-
-# Activate virtual environment
-source venv/bin/activate  # Or 'source api/bin/activate' depending on your setup
-```
-
-### 2. Install Dependencies
-
-```bash
-pip install -r requirements.txt
-```
-
-### 3. Start Required Services
-
-Make sure your local Redis server is running:
-
-```bash
-redis-server
-```
-
-### 4. Launch Application Server
-
-```bash
-uvicorn app.main:app --reload
-```
-
-The application starts at `http://127.0.0.1:8000`. Database tables in `metadata.db` will automatically initialize upon startup.
+5. **Start FastAPI Application:**
+   ```bash
+   uvicorn app.main:app --reload
+   ```
+   The service will start on `http://127.0.0.1:8000`.
 
 ---
 
-## 📖 API Documentation & Usage
+## API Usage & Endpoints
 
-Access interactive OpenAPI documentation at **`http://127.0.0.1:8000/docs`**.
+Interactive OpenAPI documentation is available at **`http://127.0.0.1:8000/docs`**.
 
-### 1. Document Ingestion (`POST /api/v1/ingest`)
+### 1. Document Ingestion
+`POST /api/v1/ingest`
 
 **cURL Request:**
 ```bash
-curl -X 'POST'   'http://127.0.0.1:8000/api/v1/ingest'   -H 'accept: application/json'   -H 'Content-Type: multipart/form-data'   -F 'file=@sample_contract.pdf;type=application/pdf'   -F 'chunking_strategy=recursive'   -F 'chunk_size=500'   -F 'chunk_overlap=50'
+curl -X 'POST'   'http://127.0.0.1:8000/api/v1/ingest'   -H 'accept: application/json'   -H 'Content-Type: multipart/form-data'   -F 'file=@sample.pdf;type=application/pdf'   -F 'chunking_strategy=recursive'   -F 'chunk_size=500'   -F 'chunk_overlap=50'
 ```
 
 **Response (`201 Created`):**
 ```json
 {
   "message": "Document successfully ingested, indexed, and saved to disk.",
-  "document_id": "a8f9b8c2-3e21-4f81-98ab-123456789abc",
-  "filename": "sample_contract.pdf",
-  "file_path": "storage/uploads/a8f9b8c2-3e21-4f81-98ab-123456789abc_sample_contract.pdf",
+  "document_id": "c394a1b0-184e-4f2a-9e12-45e89a2bc112",
+  "filename": "sample.pdf",
+  "file_path": "storage/uploads/c394a1b0-184e-4f2a-9e12-45e89a2bc112_sample.pdf",
   "chunking_strategy": "recursive",
-  "num_chunks": 18,
+  "num_chunks": 12,
   "vector_collection": "documents",
-  "uploaded_at": "2026-09-17T10:15:20.123456"
+  "uploaded_at": "2026-09-17T12:00:00.000000"
 }
 ```
 
 ---
 
-### 2. Conversational RAG (`POST /api/v1/chat`)
+### 2. Conversational RAG & Interview Booking
+`POST /api/v1/chat`
 
-#### Scenario A: Contextual Document Query
-**Request Payload:**
+**Document Query Payload:**
 ```json
 {
-  "session_id": "user_session_101",
-  "message": "What is the project delivery timeline specified in the contract?"
+  "session_id": "session_user_001",
+  "message": "What are the project deliverables mentioned in the document?"
 }
 ```
 
-**Response (`200 OK`):**
+**Interview Booking Payload:**
 ```json
 {
-  "answer": "According to the contract, final project delivery is scheduled for Q4 2026.",
-  "type": "rag_query",
-  "sources": [
-    "Final project delivery is scheduled for Q4 2026 subject to compliance verification."
-  ],
-  "booking_details": null
-}
-```
-
-#### Scenario B: Automated Interview Booking
-**Request Payload:**
-```json
-{
-  "session_id": "user_session_101",
-  "message": "I want to schedule an interview. Name: John Doe, email: john@example.com, tomorrow at 3 PM."
-}
-```
-
-**Response (`200 OK`):**
-```json
-{
-  "answer": "Your interview has been booked John Doe (john@example.com) on tomorrow at 3 PM.",
-  "type": "interview_booking",
-  "sources": [],
-  "booking_details": {
-    "name": "John Doe",
-    "email": "john@example.com",
-    "date": "tomorrow",
-    "time": "3 PM"
-  }
+  "session_id": "session_user_001",
+  "message": "I would like to schedule an interview. Name: Paras Rimal, email: paras@example.com, tomorrow at 3 PM."
 }
 ```
 
 ---
 
-## 📊 Database Inspection
+## Database Inspection
 
-To inspect relational database tables (`document_metadata` and `interview_bookings`) interactively:
+To view database records (`document_metadata` and `interview_bookings`) in a web dashboard:
 
 ```bash
-pip install datasette
 datasette metadata.db
 ```
-
-Open `http://127.0.0.1:8001` in your browser to browse, search, or export database entries.
+Navigate to `http://127.0.0.1:8001` in your browser.
