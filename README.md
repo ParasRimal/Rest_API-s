@@ -73,7 +73,7 @@ The project favors explicit, hand-rolled orchestration over black-box abstractio
 ## System Architecture
 
 ```mermaid
-flowchart TD
+flowchart LR
     %% Client Layer
     subgraph Client
         A[User / UI / cURL]
@@ -102,24 +102,16 @@ flowchart TD
     end
 
     %% Ingestion Flow
-    A -->|Upload PDF/TXT| B1
-    B1 -->|Save File| D1
-    B1 -->|Extract Text| C1
-    C1 -->|Split Text| C2
-    C2 -->|Generate Embeddings| C3
-    C3 -->|Store Vectors| D2
+    A -->|Upload PDF/TXT| B1 -->|Save File| D1
+    B1 -->|Extract Text| C1 -->|Split Text| C2 -->|Generate Embeddings| C3 -->|Store Vectors| D2
     B1 -->|Save Metadata| D4
 
     %% Chat & RAG Flow
-    A -->|Chat Query + session_id| B2
-    B2 -->|Fetch History| D3
-    B2 -->|Search Context| D2
-    D2 -->|Return Relevant Chunks| B2
-    B2 -->|Augment Prompt| C4
-    C4 -->|Answer / Booking Info| B2
+    A -->|Chat Query + session_id| B2 -->|Fetch History| D3
+    B2 -->|Search Context| D2 -->|Return Relevant Chunks| B2 -->|Augment Prompt| C4
+    C4 -->|Answer / Booking Info| B2 -->|Return JSON Response| A
     C4 -->|Update Metadata| D4
     B2 -->|Log Interaction| D3
-    B2 -->|Return JSON Response| A
 ```
 
 ### Document Ingestion Flow
