@@ -80,7 +80,7 @@ flowchart TD
     end
 
     %% API Layer
-    subgraph API (FastAPI)
+    subgraph API_FastAPI
         B1[Ingest API /upload]
         B2[Chat API /chat]
     end
