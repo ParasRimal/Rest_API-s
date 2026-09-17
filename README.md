@@ -74,48 +74,52 @@ The project favors explicit, hand-rolled orchestration over black-box abstractio
 
 ```mermaid
 flowchart TD
-    subgraph Client Layer
-        A[Client / UI / cURL]
+    %% Client Layer
+    subgraph Client
+        A[User / UI / cURL]
     end
 
-    subgraph API Layer FastAPI
-        B1[POST /api/v1/ingest]
-        B2[POST /api/v1/chat]
+    %% API Layer
+    subgraph API (FastAPI)
+        B1[Ingest API /upload]
+        B2[Chat API /chat]
     end
 
-    subgraph Processing Services
-        C1[Text Extractor pypdf / TXT]
-        C2[Chunker Service Recursive / Character]
-        C3[Embedding Model SentenceTransformer]
-        C4[RAG Orchestrator & LLM Service Groq API]
+    %% Processing Services
+    subgraph Processing
+        C1[Text Extractor]
+        C2[Text Chunker]
+        C3[Embedding Generator]
+        C4[RAG Orchestrator + LLM]
     end
 
-    subgraph Persistence Layer
-        D1[(Disk Uploads storage/uploads/)]
-        D2[(Qdrant Vector DB storage/qdrant_storage/)]
-        D3[(Redis Session Store chat_history:session_id)]
-        D4[(SQLite Database metadata.db)]
+    %% Persistence Layer
+    subgraph Storage
+        D1[(File Store)]
+        D2[(Vector DB - Qdrant)]
+        D3[(Session Store - Redis)]
+        D4[(Metadata DB - SQLite)]
     end
 
     %% Ingestion Flow
-    A -->|1. Upload PDF / TXT| B1
-    B1 -->|2. Save Raw File| D1
-    B1 -->|3. Extract Text| C1
-    C1 -->|4. Split Text| C2
-    C2 -->|5. Vectorize Chunks| C3
-    C3 -->|6. Upsert Vectors & Payloads| D2
-    B1 -->|7. Store Document Record| D4
+    A -->|Upload PDF/TXT| B1
+    B1 -->|Save File| D1
+    B1 -->|Extract Text| C1
+    C1 -->|Split Text| C2
+    C2 -->|Generate Embeddings| C3
+    C3 -->|Store Vectors| D2
+    B1 -->|Save Metadata| D4
 
     %% Chat & RAG Flow
-    A -->|1. Chat Query & session_id| B2
-    B2 -->|2. Fetch Multi-Turn History| D3
-    B2 -->|3. Similarity Search Top-K| D2
-    D2 -->|4. Relevant Context| B2
-    B2 -->|5. Augment Prompt & Detect Intent| C4
-    C4 -->|6a. Contextual Answer| B2
-    C4 -->|6b. Extracted Booking Details| D4
-    B2 -->|7. Append Interaction| D3
-    B2 -->|8. JSON Response| A
+    A -->|Chat Query + session_id| B2
+    B2 -->|Fetch History| D3
+    B2 -->|Search Context| D2
+    D2 -->|Return Relevant Chunks| B2
+    B2 -->|Augment Prompt| C4
+    C4 -->|Answer / Booking Info| B2
+    C4 -->|Update Metadata| D4
+    B2 -->|Log Interaction| D3
+    B2 -->|Return JSON Response| A
 ```
 
 ### Document Ingestion Flow
